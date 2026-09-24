@@ -79,34 +79,30 @@ io.on('connection', (socket) => {
     const room = rooms[roomId];
     if (!room || !room.currentQuestion) return;
 
+    // 比對答案（轉為數字）
     if (parseInt(answer, 10) === room.currentQuestion.answer) {
-      // 答對，加分
-      room.scores[socket.id] = (room.scores[socket.id] || 0) + 1;
+        // 增加該玩家的分數
+        room.scores[socket.id] = (room.scores[socket.id] || 0) + 1;
 
-      // 廣播給房間內所有人：誰答對了
-      io.to(roomId).emit('playerScored', {
-        winnerSocketId: socket.id,
-        scores: room.scores
-      });
-
-      // 檢查是否有人達到目標勝分
-      const p1Score = room.scores[room.players[0]] || 0;
-      const p2Score = room.scores[room.players[1]] || 0;
-
-      if (p1Score >= room.targetGoal || p2Score >= room.targetGoal) {
-        io.to(roomId).emit('gameOver', {
-          winnerSocketId: p1Score >= room.targetGoal ? room.players[0] : room.players[1]
+        // 廣播給房間內所有人：更新分數與水位
+        io.to(roomId).emit('playerScored', {
+            winnerSocketId: socket.id,
+            scores: room.scores
         });
-      } else {
-        // 出下一題
-        room.currentQuestion = generateQuestion(room.difficulty);
-        io.to(roomId).emit('nextQuestion', { question: room.currentQuestion });
-      }
+
+        // 檢查是否達到目標勝出題數
+        if (room.scores[socket.id] >= room.targetGoal) {
+            io.to(roomId).emit('gameOver', { winnerSocketId: socket.id });
+            delete rooms[roomId]; // 遊戲結束，清理房間資料
+        } else {
+            // 出下一題
+            room.currentQuestion = generateQuestion(room.difficulty);
+            io.to(roomId).emit('nextQuestion', { question: room.currentQuestion });
+        }
     } else {
-      // 答錯，僅通知該玩家
-      socket.emit('wrongAnswer');
+        socket.emit('wrongAnswer');
     }
-  });
+});
 
   // 3. 斷線處理
   socket.on('disconnect', () => {
